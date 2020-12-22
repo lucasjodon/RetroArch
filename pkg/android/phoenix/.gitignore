@@ -9,3 +9,4 @@ settings.gradle
 dynamic_features.gradle
 res/values/core_names.xml
 res/values/module_names_*.xml
+!libs

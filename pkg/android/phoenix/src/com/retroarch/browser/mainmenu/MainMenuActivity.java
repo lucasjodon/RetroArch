@@ -2,7 +2,9 @@ package com.retroarch.browser.mainmenu;
 
 import com.retroarch.browser.preferences.util.UserPreferences;
 import com.retroarch.browser.retroactivity.RetroActivityFuture;
+import com.retroarch.browser.retroactivity.SecondaryRetroActivity;
 
+import android.app.ActivityOptions;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
@@ -22,6 +24,9 @@ import android.content.DialogInterface;
 import android.app.AlertDialog;
 import android.util.Log;
 
+import com.lge.display.DisplayManagerHelper;
+import com.lge.display.DisplayManagerHelper.SwivelStateCallback;
+
 /**
  * {@link PreferenceActivity} subclass that provides all of the
  * functionality of the main menu screen.
@@ -31,6 +36,11 @@ public final class MainMenuActivity extends PreferenceActivity
 	final private int REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS = 124;
 	public static String PACKAGE_NAME;
 	boolean checkPermissions = false;
+
+	// LG Wing specific dependencies
+    private DisplayManagerHelper mDisplayManagerHelper;
+    private boolean mIsLgSwivelDevice = false;
+    private LgSwivelStateCallback mSwivelStateCallback;
 
 	public void showMessageOKCancel(String message, DialogInterface.OnClickListener onClickListener)
 	{
@@ -192,6 +202,65 @@ public final class MainMenuActivity extends PreferenceActivity
 
 		UserPreferences.updateConfigFile(this);
 
+		if (hasLGSwivelFeature()) {
+			Log.i("RetroArchMain", "Device has LG swivel feature");
+            mDisplayManagerHelper = new DisplayManagerHelper(this);
+            mIsLgSwivelDevice = true;
+            mSwivelStateCallback = new LgSwivelStateCallback();
+            mDisplayManagerHelper.registerSwivelStateCallback(mSwivelStateCallback);
+		}
+
 		checkRuntimePermissions();
 	}
+
+    private boolean hasLGSwivelFeature() {
+        String feature = "com.lge.multiscreen";
+        PackageManager pm = getPackageManager();
+        if (!pm.hasSystemFeature(feature)) {
+            return false;
+        }
+
+        if (!DisplayManagerHelper.isMultiDisplayDevice()) {
+            return false;
+        }
+
+        return (DisplayManagerHelper.getMultiDisplayType() == DisplayManagerHelper.TYPE_SWIVEL);
+    }
+
+    private void startSecondaryActivity() {
+        Log.i("RetroArchMain", "Starting secondary activity");
+        Intent intent = new Intent(this, SecondaryRetroActivity.class);
+        ActivityOptions options = ActivityOptions.makeBasic();
+        // set Display ID where your activity will be launched
+        int launchDisplayId = mDisplayManagerHelper.getMultiDisplayId();
+        options.setLaunchDisplayId(launchDisplayId);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
+        startActivity(intent, options.toBundle());
+    }
+
+    private void stopSecondaryActivity() {
+        Log.i("RetroArchMain", "Stoping secondary activity");
+        Intent intent = new Intent(SecondaryRetroActivity.ACTION_FINISH_SECONDARYACTIVITY);
+        sendBroadcast(intent);
+    }
+
+    private class LgSwivelStateCallback extends SwivelStateCallback {
+        @Override
+        public void onSwivelStateChanged(int state) {
+            switch (state) {
+                case DisplayManagerHelper.SWIVEL_START:
+                    break;
+                case DisplayManagerHelper.SWIVEL_END:
+                    startSecondaryActivity();
+                    break;
+                case DisplayManagerHelper.NON_SWIVEL_START:
+                    break;
+                case DisplayManagerHelper.NON_SWIVEL_END:
+                    stopSecondaryActivity();
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
 }
